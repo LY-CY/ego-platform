@@ -1123,19 +1123,37 @@ function renderForceGraph() {
     });
   }
 
-  // Build links
+  // Build a lookup map: party id -> node id
+  var partyAMap = {};
+  for (var ai = 0; ai < partiesA.length; ai++) { partyAMap[partiesA[ai].id] = 'pa-' + partiesA[ai].id; }
+  var partyBMap = {};
+  for (var bi = 0; bi < partiesB.length; bi++) { partyBMap[partiesB[bi].id] = 'pb-' + partiesB[bi].id; }
+
+  // Build links (match by party object id, not hardcoded id)
+  var nodeIds = {};
+  for (var ni = 0; ni < nodes.length; ni++) { nodeIds[nodes[ni].id] = true; }
   var links = [];
   for (var p = 0; p < aOrders.length; p++) {
-    links.push({ source: 'ord-a-' + aOrders[p].id, target: 'pa-' + aOrders[p].party_a_id, value: aOrders[p].contract_amount || 1 });
+    var srcA = 'ord-a-' + aOrders[p].id;
+    var tgtA = partyAMap[aOrders[p].party_a_id];
+    if (srcA && tgtA && nodeIds[srcA] && nodeIds[tgtA]) {
+      links.push({ source: srcA, target: tgtA, value: aOrders[p].contract_amount || 1 });
+    }
   }
   for (var q = 0; q < bOrders.length; q++) {
-    links.push({ source: 'pb-' + bOrders[q].party_b_id, target: 'ord-b-' + bOrders[q].id, value: bOrders[q].contract_amount || 1 });
+    var srcB = partyBMap[bOrders[q].party_b_id];
+    var tgtB = 'ord-b-' + bOrders[q].id;
+    if (srcB && tgtB && nodeIds[srcB] && nodeIds[tgtB]) {
+      links.push({ source: srcB, target: tgtB, value: bOrders[q].contract_amount || 1 });
+    }
   }
   // Link locations to orders based on content match (loose)
   for (var r = 0; r < locs.length; r++) {
     for (var s = 0; s < aOrders.length; s++) {
-      if (aOrders[s].data_content && locs[r].city && aOrders[s].data_content.indexOf(locs[r].city) >= 0) {
-        links.push({ source: 'loc-' + locs[r].id, target: 'ord-a-' + aOrders[s].id, value: 0.5, dashed: true });
+      var srcL = 'loc-' + locs[r].id;
+      var tgtL = 'ord-a-' + aOrders[s].id;
+      if (nodeIds[srcL] && nodeIds[tgtL] && aOrders[s].data_content && locs[r].city && aOrders[s].data_content.indexOf(locs[r].city) >= 0) {
+        links.push({ source: srcL, target: tgtL, value: 0.5, dashed: true });
       }
     }
   }
