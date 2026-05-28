@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>羲舟EGO - 数据治理平台</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <style>
 /* ============ RESET & BASE ============ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -237,6 +240,52 @@ textarea.form-control { resize: vertical; min-height: 60px; }
 .filter-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px; }
 .filter-row .form-group { margin-bottom: 0; }
 
+/* ============ DATE FILTER BAR ============ */
+.date-filter-bar {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px 20px; margin-bottom: 20px;
+}
+.date-filter-bar .filter-label { font-size: 13px; color: var(--text-secondary); font-weight: 600; white-space: nowrap; }
+.date-filter-bar .form-control { width: 150px; margin: 0; }
+.date-filter-bar .filter-info {
+  font-size: 12px; color: var(--accent); margin-left: auto; display: flex; align-items: center; gap: 4px;
+}
+
+/* ============ FORCE GRAPH ============ */
+.force-graph-wrap {
+  position: relative; background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; margin-bottom: 24px;
+}
+.force-graph-wrap .fg-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px; border-bottom: 1px solid var(--border);
+}
+.force-graph-wrap .fg-legend {
+  display: flex; gap: 16px; font-size: 11px; color: var(--text-secondary);
+}
+.force-graph-wrap .fg-legend span { display: flex; align-items: center; gap: 5px; }
+.force-graph-wrap .fg-legend .dot {
+  width: 10px; height: 10px; border-radius: 50%; display: inline-block;
+}
+#force-graph { width: 100%; height: 420px; cursor: grab; }
+#force-graph:active { cursor: grabbing; }
+.force-tooltip {
+  position: absolute; pointer-events: none; background: rgba(10,14,39,0.95);
+  border: 1px solid var(--accent); border-radius: 6px; padding: 10px 14px;
+  font-size: 12px; color: var(--text-primary); box-shadow: 0 0 20px rgba(0,212,255,0.3);
+  max-width: 260px; z-index: 10; display: none;
+}
+
+/* ============ EXPORT BUTTON ============ */
+.export-btn {
+  background: rgba(0,212,255,0.1); border: 1px solid var(--accent);
+  color: var(--accent); display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: var(--radius-sm); font-size: 13px;
+  font-weight: 500; cursor: pointer; transition: var(--transition);
+}
+.export-btn:hover { background: var(--accent); color: #000; box-shadow: 0 0 16px var(--accent-glow); }
+
 /* Summary cards small */
 .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
 .summary-card {
@@ -295,8 +344,37 @@ textarea.form-control { resize: vertical; min-height: 60px; }
 
   <!-- ===== DASHBOARD PAGE ===== -->
   <div class="page active" id="page-dashboard">
-    <div class="page-header"><h1>总览仪表盘</h1></div>
+    <div class="page-header">
+      <h1>总览仪表盘</h1>
+      <button class="export-btn" onclick="exportDashboardPDF()" title="导出仪表盘为PDF">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        导出PDF
+      </button>
+    </div>
+    <!-- Date Filter Bar -->
+    <div class="date-filter-bar">
+      <span class="filter-label">📅 查看日期范围：</span>
+      <input type="date" class="form-control" id="dash-date-from" onchange="onDateFilterChange()">
+      <span style="color:var(--text-muted);">至</span>
+      <input type="date" class="form-control" id="dash-date-to" onchange="onDateFilterChange()">
+      <button class="btn btn-outline btn-sm" onclick="resetDateFilter()">重置</button>
+      <span class="filter-info" id="dash-filter-info"></span>
+    </div>
     <div class="kpi-grid" id="dash-kpi-grid"></div>
+    <!-- Force-directed Graph -->
+    <div class="force-graph-wrap" id="force-graph-wrap">
+      <div class="fg-header">
+        <h3 style="font-size:16px;font-weight:600;">关系图谱</h3>
+        <div class="fg-legend">
+          <span><span class="dot" style="background:#00d4ff;"></span>甲方</span>
+          <span><span class="dot" style="background:#ffab40;"></span>乙方</span>
+          <span><span class="dot" style="background:#7c4dff;"></span>商单</span>
+          <span><span class="dot" style="background:#00e676;"></span>采集地点</span>
+        </div>
+      </div>
+      <svg id="force-graph"></svg>
+      <div class="force-tooltip" id="force-tooltip"></div>
+    </div>
     <div class="chart-grid">
       <div class="card"><div class="card-header"><h3>近7日产能趋势</h3></div><div class="chart-container"><canvas id="chart-trend"></canvas></div></div>
       <div class="card"><div class="card-header"><h3>商单状态分布</h3></div><div class="chart-container"><canvas id="chart-doughnut"></canvas></div></div>
@@ -642,10 +720,22 @@ const DB = (function() {
       };
     },
 
-    // Dashboard
-    dashboard: function() {
+    // Dashboard (supports optional date range filtering)
+    dashboard: function(dateFrom, dateTo) {
       load();
-      var prod = data.productivity || [];
+      var allProd = data.productivity || [];
+      // Filter productivity by date range
+      var prod = allProd;
+      if (dateFrom || dateTo) {
+        prod = [];
+        for (var i = 0; i < allProd.length; i++) {
+          var d = allProd[i].date;
+          if (!d) continue;
+          if (dateFrom && d < dateFrom) continue;
+          if (dateTo && d > dateTo) continue;
+          prod.push(allProd[i]);
+        }
+      }
       var total_hours = 0;
       for (var i = 0; i < prod.length; i++) { total_hours += (+prod[i].hours || 0); }
       var dateSet = {};
@@ -928,13 +1018,266 @@ function hexToRgb(hex) {
 /* ================================================================= */
 var chartTrend = null, chartDoughnut = null;
 
+/* ================================================================= */
+/*                      DATE FILTER STATE                              */
+/* ================================================================= */
+var dateFilterFrom = '';
+var dateFilterTo = '';
+
+function onDateFilterChange() {
+  dateFilterFrom = document.getElementById('dash-date-from').value || '';
+  dateFilterTo = document.getElementById('dash-date-to').value || '';
+  updateFilterInfo();
+  loadDashboard();
+}
+
+function resetDateFilter() {
+  dateFilterFrom = '';
+  dateFilterTo = '';
+  document.getElementById('dash-date-from').value = '';
+  document.getElementById('dash-date-to').value = '';
+  updateFilterInfo();
+  loadDashboard();
+}
+
+function updateFilterInfo() {
+  var el = document.getElementById('dash-filter-info');
+  if (dateFilterFrom || dateFilterTo) {
+    el.textContent = '✓ 已筛选：' + (dateFilterFrom || '起初') + ' ~ ' + (dateFilterTo || '至今');
+    el.style.color = '#00e676';
+  } else {
+    el.textContent = '显示全部数据';
+    el.style.color = 'var(--accent)';
+  }
+}
+
+function filterByDate(items, dateField) {
+  if (!dateFilterFrom && !dateFilterTo) return items;
+  var result = [];
+  for (var i = 0; i < items.length; i++) {
+    var d = items[i][dateField];
+    if (!d) continue;
+    if (dateFilterFrom && d < dateFilterFrom) continue;
+    if (dateFilterTo && d > dateFilterTo) continue;
+    result.push(items[i]);
+  }
+  return result;
+}
+
+/* ================================================================= */
+/*                       LOAD DASHBOARD                                */
+/* ================================================================= */
 function loadDashboard() {
-  var d = DB.dashboard();
+  var d = DB.dashboard(dateFilterFrom, dateFilterTo);
   renderDashboardKPIs(d);
+  renderForceGraph();
   renderDashboardCharts(d);
   renderDashboardOrderCompare();
   renderDashboardFinance(d);
   renderDashboardRecent(d);
+}
+
+/* ================================================================= */
+/*                    FORCE-DIRECTED GRAPH                             */
+/* ================================================================= */
+var forceGraphInitialized = false;
+
+function renderForceGraph() {
+  var partiesA = DB.partyA.all();
+  var partiesB = DB.partyB.all();
+  var aOrders = DB.partyAOrders.all();
+  var bOrders = DB.partyBOrders.all();
+  var locs = DB.locations.all();
+
+  // Build nodes
+  var nodes = [];
+  // Party A nodes
+  for (var i = 0; i < partiesA.length; i++) {
+    nodes.push({ id: 'pa-' + partiesA[i].id, name: partiesA[i].name, type: 'party_a', icon: 'a' });
+  }
+  // Party B nodes
+  for (var j = 0; j < partiesB.length; j++) {
+    nodes.push({ id: 'pb-' + partiesB[j].id, name: partiesB[j].name, type: 'party_b', icon: 'b' });
+  }
+  // Location nodes
+  for (var k = 0; k < locs.length; k++) {
+    nodes.push({ id: 'loc-' + locs[k].id, name: locs[k].name, type: 'location', icon: 'l' });
+  }
+  // Order nodes
+  for (var m = 0; m < aOrders.length; m++) {
+    nodes.push({
+      id: 'ord-a-' + aOrders[m].id,
+      name: (aOrders[m].data_content || '商单').substring(0, 8),
+      type: 'order_a', status: aOrders[m].status, amount: aOrders[m].contract_amount,
+      partyId: 'pa-' + aOrders[m].party_a_id, icon: 'o'
+    });
+  }
+  for (var n = 0; n < bOrders.length; n++) {
+    nodes.push({
+      id: 'ord-b-' + bOrders[n].id,
+      name: (bOrders[n].data_content || '商单').substring(0, 8),
+      type: 'order_b', status: bOrders[n].status, amount: bOrders[n].contract_amount,
+      partyId: 'pb-' + bOrders[n].party_b_id, icon: 'o'
+    });
+  }
+
+  // Build links
+  var links = [];
+  for (var p = 0; p < aOrders.length; p++) {
+    links.push({ source: 'ord-a-' + aOrders[p].id, target: 'pa-' + aOrders[p].party_a_id, value: aOrders[p].contract_amount || 1 });
+  }
+  for (var q = 0; q < bOrders.length; q++) {
+    links.push({ source: 'pb-' + bOrders[q].party_b_id, target: 'ord-b-' + bOrders[q].id, value: bOrders[q].contract_amount || 1 });
+  }
+  // Link locations to orders based on content match (loose)
+  for (var r = 0; r < locs.length; r++) {
+    for (var s = 0; s < aOrders.length; s++) {
+      if (aOrders[s].data_content && locs[r].city && aOrders[s].data_content.indexOf(locs[r].city) >= 0) {
+        links.push({ source: 'loc-' + locs[r].id, target: 'ord-a-' + aOrders[s].id, value: 0.5, dashed: true });
+      }
+    }
+  }
+
+  var svg = d3.select('#force-graph');
+  svg.selectAll('*').remove();
+
+  var width = document.getElementById('force-graph').clientWidth || 800;
+  var height = 420;
+
+  var colorMap = { party_a: '#00d4ff', party_b: '#ffab40', location: '#00e676', order_a: '#7c4dff', order_b: '#7c4dff' };
+  var sizeMap = { party_a: 18, party_b: 18, location: 14, order_a: 10, order_b: 10 };
+
+  var simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(function(d) { return d.id; }).distance(function(d) { return d.dashed ? 180 : 120; }))
+    .force('charge', d3.forceManyBody().strength(-350))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collision', d3.forceCollide().radius(30));
+
+  // Define arrow marker
+  svg.append('defs').append('marker')
+    .attr('id', 'arrowhead')
+    .attr('viewBox', '0 -5 10 10')
+    .attr('refX', 22)
+    .attr('refY', 0)
+    .attr('markerWidth', 6)
+    .attr('markerHeight', 6)
+    .attr('orient', 'auto')
+    .append('path')
+    .attr('d', 'M0,-4L8,0L0,4')
+    .attr('fill', '#5a6380');
+
+  // Draw links
+  var link = svg.append('g').selectAll('line')
+    .data(links).join('line')
+    .attr('stroke', '#5a6380')
+    .attr('stroke-width', function(d) { return Math.max(1, Math.log(d.value) / 8); })
+    .attr('stroke-dasharray', function(d) { return d.dashed ? '6,4' : null; })
+    .attr('marker-end', 'url(#arrowhead)')
+    .attr('stroke-opacity', 0.5);
+
+  // Draw nodes
+  var node = svg.append('g').selectAll('g')
+    .data(nodes).join('g')
+    .attr('cursor', 'pointer')
+    .call(d3.drag()
+      .on('start', function(event, d) { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag', function(event, d) { d.fx = event.x; d.fy = event.y; })
+      .on('end', function(event, d) { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
+    );
+
+  node.append('circle')
+    .attr('r', function(d) { return sizeMap[d.type] || 10; })
+    .attr('fill', function(d) { return colorMap[d.type] || '#5a6380'; })
+    .attr('stroke', function(d) { return d3.rgb(colorMap[d.type] || '#5a6380').brighter(0.5); })
+    .attr('stroke-width', 2)
+    .attr('stroke-opacity', 0.7);
+
+  node.append('text')
+    .text(function(d) { return d.name; })
+    .attr('x', function(d) { return (sizeMap[d.type] || 10) + 6; })
+    .attr('y', 4)
+    .attr('fill', '#e0e6ff')
+    .attr('font-size', '10px')
+    .attr('font-family', '-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif');
+
+  // Tooltip
+  var tooltip = d3.select('#force-tooltip');
+  node.on('mouseover', function(event, d) {
+    var info = '<strong>' + d.name + '</strong><br/>';
+    info += '类型: ' + ({party_a:'甲方',party_b:'乙方',location:'采集地点',order_a:'甲方商单',order_b:'乙方商单'})[d.type] + '<br/>';
+    if (d.status) info += '状态: ' + d.status + '<br/>';
+    if (d.amount) info += '金额: ¥' + Number(d.amount).toLocaleString('zh-CN',{minimumFractionDigits:2}) + '<br/>';
+    tooltip.html(info).style('display', 'block').style('left', (event.offsetX + 15) + 'px').style('top', (event.offsetY - 10) + 'px');
+  })
+  .on('mousemove', function(event) {
+    tooltip.style('left', (event.offsetX + 15) + 'px').style('top', (event.offsetY - 10) + 'px');
+  })
+  .on('mouseout', function() { tooltip.style('display', 'none'); });
+
+  simulation.on('tick', function() {
+    link
+      .attr('x1', function(d) { return d.source.x; })
+      .attr('y1', function(d) { return d.source.y; })
+      .attr('x2', function(d) { return d.target.x; })
+      .attr('y2', function(d) { return d.target.y; });
+    node.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+  });
+
+  forceGraphInitialized = true;
+}
+
+/* ================================================================= */
+/*                     PDF EXPORT FUNCTION                             */
+/* ================================================================= */
+function exportDashboardPDF() {
+  toast('正在生成PDF，请稍候...', 'info');
+  var dashboardEl = document.getElementById('page-dashboard');
+  
+  // Hide elements not suitable for PDF
+  var sidebar = document.querySelector('.sidebar');
+  var forceGraphWrap = document.getElementById('force-graph-wrap');
+  var dateFilterBar = document.querySelector('.date-filter-bar');
+  var exportBtn = document.querySelector('.export-btn');
+  
+  // Temporarily adjust layout
+  var mainEl = document.querySelector('.main');
+  var origMarginLeft = mainEl.style.marginLeft;
+  var origWidth = dashboardEl.style.width;
+  mainEl.style.marginLeft = '0';
+  dashboardEl.style.width = '1100px';
+
+  html2canvas(dashboardEl, {
+    backgroundColor: '#0a0e27',
+    scale: 2,
+    useCORS: true,
+    logging: false
+  }).then(function(canvas) {
+    // Restore layout
+    mainEl.style.marginLeft = origMarginLeft;
+    dashboardEl.style.width = origWidth;
+
+    var imgData = canvas.toDataURL('image/png');
+    var pdf = new jspdf.jsPDF('landscape', 'mm', 'a4');
+    var pdfWidth = pdf.internal.pageSize.getWidth();
+    var pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    
+    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+    
+    // If content overflows one page, add more pages
+    var totalPages = Math.ceil(pdfHeight / pdf.internal.pageSize.getHeight());
+    for (var p = 1; p < totalPages; p++) {
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, -(p * pdf.internal.pageSize.getHeight()), pdfWidth, pdfHeight);
+    }
+
+    var dateStr = new Date().toISOString().slice(0, 10);
+    pdf.save('Ego数据治理平台_仪表盘_' + dateStr + '.pdf');
+    toast('PDF 导出成功！', 'success');
+  }).catch(function(err) {
+    mainEl.style.marginLeft = origMarginLeft;
+    dashboardEl.style.width = origWidth;
+    toast('PDF 导出失败: ' + err.message, 'error');
+  });
 }
 
 function renderDashboardKPIs(d) {
@@ -1752,5 +2095,4 @@ function loadIndicators() {
 
 </script>
 </body>
-</html>< ! - -   d e p l o y   - - >  
- 
+</html>
