@@ -268,7 +268,7 @@ textarea.form-control { resize: vertical; min-height: 60px; }
 .force-graph-wrap .fg-legend .dot {
   width: 10px; height: 10px; border-radius: 50%; display: inline-block;
 }
-#force-graph { width: 100%; height: 420px; cursor: grab; }
+#force-graph { width: 100%; height: 420px; cursor: grab; display: block; }
 #force-graph:active { cursor: grabbing; }
 .force-tooltip {
   position: absolute; pointer-events: none; background: rgba(10,14,39,0.95);
@@ -1141,8 +1141,11 @@ function renderForceGraph() {
   var svg = d3.select('#force-graph');
   svg.selectAll('*').remove();
 
-  var width = document.getElementById('force-graph').clientWidth || 800;
+  var container = document.getElementById('force-graph');
+  var width = container.parentElement.clientWidth || 800;
   var height = 420;
+
+  svg.attr('width', width).attr('height', height).attr('viewBox', '0 0 ' + width + ' ' + height);
 
   var colorMap = { party_a: '#00d4ff', party_b: '#ffab40', location: '#00e676', order_a: '#7c4dff', order_b: '#7c4dff' };
   var sizeMap = { party_a: 18, party_b: 18, location: 14, order_a: 10, order_b: 10 };
