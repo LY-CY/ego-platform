@@ -932,7 +932,9 @@ const DB = (function() {
     // Seed data
     seed: function() {
       load();
-      if ((data.locations || []).length > 0) return;
+      // Migrate: old data without _seeded flag gets marked to prevent re-seeding
+      if (!data._seeded && (data.locations || []).length > 0) { data._seeded = true; save(); }
+      if (data._seeded) return;
       var random = function() { return Math.random(); };
       this.locations.create({ code: 'BJ-01', name: '北京数据中心', city: '北京' });
       this.locations.create({ code: 'SH-01', name: '上海采集站', city: '上海' });
@@ -978,6 +980,7 @@ const DB = (function() {
         var fd = finData[fi];
         this.financial.create({ category: fd[0], entry_type: fd[1], account_name: fd[2], month_amount: fd[3], year_cumulative: fd[4] });
       }
+      data._seeded = true; save();
     }
   };
 })();
