@@ -1070,8 +1070,8 @@ function filterByDate(items, dateField) {
 function loadDashboard() {
   var d = DB.dashboard(dateFilterFrom, dateFilterTo);
   renderDashboardKPIs(d);
-  renderForceGraph();
-  renderDashboardCharts(d);
+  try { renderForceGraph(); } catch(e) { console.warn('Force graph failed:', e); }
+  try { renderDashboardCharts(d); } catch(e) { console.warn('Charts failed:', e); }
   renderDashboardOrderCompare();
   renderDashboardFinance(d);
   renderDashboardRecent(d);
@@ -1142,9 +1142,12 @@ function renderForceGraph() {
   svg.selectAll('*').remove();
 
   var container = document.getElementById('force-graph');
-  var width = container.parentElement.clientWidth || 800;
+  if (!container) return; // safety check
+  var width = container.parentElement.clientWidth || container.clientWidth || 800;
   var height = 420;
-
+  // Force explicit size on SVG
+  container.setAttribute('width', width);
+  container.setAttribute('height', height);
   svg.attr('width', width).attr('height', height).attr('viewBox', '0 0 ' + width + ' ' + height);
 
   var colorMap = { party_a: '#00d4ff', party_b: '#ffab40', location: '#00e676', order_a: '#7c4dff', order_b: '#7c4dff' };
@@ -1302,6 +1305,8 @@ function renderDashboardKPIs(d) {
 
 function renderDashboardCharts(d) {
   // Trend chart
+  var trendCanvas = document.getElementById('chart-trend');
+  if (!trendCanvas) return;
   var recent = d.recent_productivity || [];
   var dateMap = {};
   for (var i = 0; i < recent.length; i++) {
