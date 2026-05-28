@@ -364,7 +364,12 @@ textarea.form-control { resize: vertical; min-height: 60px; }
     </div>
     <div class="kpi-grid" id="dash-kpi-grid"></div>
     <!-- Force-directed Graph -->
-    <div class="force-graph-wrap" id="force-graph-wrap">
+    <!-- Force graph debug: node count shown in page -->
+<style>
+#fg-debug { position: fixed; bottom: 10px; left: 10px; background: rgba(0,0,0,0.8); color: #0f0; padding: 8px 12px; border-radius: 6px; font-size: 12px; z-index: 9999; font-family: monospace; }
+</style>
+<div id="fg-debug">nodes: <span id="fg-node-count">0</span> links: <span id="fg-link-count">0</span></div>
+<div class="force-graph-wrap" id="force-graph-wrap">
       <div class="fg-header">
         <h3 style="font-size:16px;font-weight:600;">关系图谱</h3>
         <div class="fg-legend">
@@ -1158,6 +1163,13 @@ function renderForceGraph() {
     }
   }
 
+  // If no real links, create placeholder links so nodes spread out
+  if (links.length === 0 && nodes.length > 1) {
+    for (var ll = 0; ll < nodes.length - 1; ll++) {
+      links.push({ source: nodes[ll].id, target: nodes[ll + 1].id, value: 0.5, dashed: true, placeholder: true });
+    }
+  }
+
   var svg = d3.select('#force-graph');
   svg.selectAll('*').remove();
 
@@ -1168,6 +1180,10 @@ function renderForceGraph() {
   // Force explicit size on SVG
   container.setAttribute('width', width);
   container.setAttribute('height', height);
+  var nodeEl = document.getElementById('fg-node-count');
+  var linkEl = document.getElementById('fg-link-count');
+  if (nodeEl) nodeEl.textContent = nodes.length;
+  if (linkEl) linkEl.textContent = links.length;
   svg.attr('width', width).attr('height', height).attr('viewBox', '0 0 ' + width + ' ' + height);
 
   var colorMap = { party_a: '#00d4ff', party_b: '#ffab40', location: '#00e676', order_a: '#7c4dff', order_b: '#7c4dff' };
