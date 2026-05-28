@@ -140,6 +140,23 @@ tr:hover td { background: rgba(0,212,255,0.03); }
   transition: var(--transition); outline: none;
 }
 .form-control:focus { border-color: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
+/* Fix date input visibility in dark mode */
+input[type="date"].form-control {
+  color-scheme: dark;
+  -webkit-color-scheme: dark;
+  min-height: 38px;
+  cursor: pointer;
+}
+input[type="date"].form-control::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}
+input[type="date"].form-control::-webkit-datetime-edit-text,
+input[type="date"].form-control::-webkit-datetime-edit-month-field,
+input[type="date"].form-control::-webkit-datetime-edit-day-field,
+input[type="date"].form-control::-webkit-datetime-edit-year-field {
+  color: var(--text-primary);
+}
 select.form-control { cursor: pointer; }
 textarea.form-control { resize: vertical; min-height: 60px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
