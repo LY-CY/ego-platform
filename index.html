@@ -147,17 +147,31 @@ input[type="date"].form-control {
   min-height: 38px;
   cursor: pointer;
   color: var(--text-primary) !important;
+  position: relative;
 }
-/* Chrome/Edge: invert calendar icon to be visible */
+/* Chrome/Edge: replace calendar icon with custom SVG arrow */
 input[type="date"].form-control::-webkit-calendar-picker-indicator {
-  filter: invert(1) brightness(1.5);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2300d4ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-size: 16px;
+  background-repeat: no-repeat;
+  background-position: center;
+  width: 24px;
+  height: 24px;
   cursor: pointer;
   opacity: 1;
+  filter: none;
 }
 /* Firefox: ensure calendar icon visible */
 input[type="date"].form-control::-moz-calendar-picker-indicator {
-  filter: invert(1);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2300d4ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-size: 16px;
+  background-repeat: no-repeat;
+  background-position: center;
+  width: 24px;
+  height: 24px;
   cursor: pointer;
+  opacity: 1;
+  filter: none;
 }
 /* Ensure date text is always visible */
 input[type="date"].form-control::-webkit-datetime-edit-text,
