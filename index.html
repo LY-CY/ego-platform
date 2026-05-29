@@ -730,9 +730,13 @@ const CLOUD = (function() {
   var apiKey = '';
   var enabled = false;
 
+  // Hardcoded default config (auto-connect for this project)
+  var DEFAULT_URL = 'https://qmupusaxpswgbkdvlwsy.supabase.co';
+  var DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFtdXB1c2F4cHN3Z2JrZHZsd3N5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwMDY2NTQsImV4cCI6MjA5NTU4MjY1NH0.sOiDg2FU7KrVg9c71K1mCU5P3qaF1NiZ6v-6O61Xnwc';
+
   function init() {
-    var url = localStorage.getItem(KEY_URL);
-    var key = localStorage.getItem(KEY_KEY);
+    var url = localStorage.getItem(KEY_URL) || DEFAULT_URL;
+    var key = localStorage.getItem(KEY_KEY) || DEFAULT_KEY;
     if (url && key) {
       baseUrl = url.replace(/\/+$/, '') + '/rest/v1';
       apiKey = key;
