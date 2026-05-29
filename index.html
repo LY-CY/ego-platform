@@ -13,6 +13,7 @@
 <script src="https://cdn.bootcdn.net/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <script src="https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdn.bootcdn.net/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
 <style>
 /* ============ RESET & BASE ============ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -70,6 +71,20 @@ a { color: var(--accent); text-decoration: none; }
   padding: 16px 20px; border-top: 1px solid var(--border); margin-top: auto;
   font-size: 11px; color: var(--text-muted); text-align: center;
 }
+
+/* ============ CLOUD SYNC ============ */
+.cloud-status { cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 0; margin-bottom: 6px; border-radius: var(--radius-sm); transition: var(--transition); }
+.cloud-status:hover { background: var(--bg-hover); }
+.cloud-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.cloud-dot.off { background: #666; }
+.cloud-dot.on { background: var(--success); box-shadow: 0 0 6px var(--success); }
+.cloud-dot.syncing { background: var(--warning); animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 9999; align-items: center; justify-content: center; }
+.modal-overlay.show { display: flex; }
+.cloud-modal { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; width: 90%; max-width: 520px; max-height: 90vh; overflow-y: auto; }
+.cloud-field-label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; font-weight: 600; }
 
 /* ============ MAIN CONTENT ============ */
 .main { margin-left: var(--sidebar-w); flex: 1; padding: 24px 28px; min-height: 100vh; }
@@ -361,6 +376,7 @@ textarea.form-control { resize: vertical; min-height: 60px; }
   .nav-item { justify-content: center; padding: 12px 8px; }
   .main { margin-left: 60px; padding: 16px; }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .cloud-modal { width: 95%; padding: 20px; }
 }
 </style>
 </head>
@@ -390,8 +406,42 @@ textarea.form-control { resize: vertical; min-height: 60px; }
       <span>财务报表</span>
     </div>
   </nav>
-  <div class="sidebar-footer">&copy; 2026 羲舟数据治理平台</div>
+  <div class="sidebar-footer">
+    <div class="cloud-status" id="cloud-status" onclick="showCloudConfig()" title="点击配置云同步">
+      <span class="cloud-dot" id="cloud-dot"></span>
+      <span id="cloud-label">未连接云端</span>
+    </div>
+    <div>&copy; 2026 羲舟数据治理平台</div>
+  </div>
 </aside>
+
+<!-- CLOUD CONFIG MODAL -->
+<div class="modal-overlay" id="cloud-modal-overlay" onclick="if(event.target===this)closeCloudConfig()">
+  <div class="cloud-modal">
+    <h3>☁️ 云端同步配置</h3>
+    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:16px;">
+      配置 Supabase 后，所有浏览器的数据将自动同步。<br>
+      首次使用需创建免费 Supabase 项目：<a href="https://supabase.com" target="_blank" style="color:var(--accent);">supabase.com</a>
+    </p>
+    <label class="cloud-field-label">Project URL</label>
+    <input type="text" id="cloud-url" class="form-control" placeholder="https://xxxxx.supabase.co" style="margin-bottom:12px;">
+    <label class="cloud-field-label">anon public key</label>
+    <input type="text" id="cloud-key" class="form-control" placeholder="eyJhbGciOi..." style="margin-bottom:16px;">
+    <div style="margin-bottom:12px;">
+      <details style="cursor:pointer;color:var(--text-secondary);font-size:12px;">
+        <summary>📋 SQL 迁移脚本（在 Supabase SQL Editor 中执行）</summary>
+        <pre id="cloud-sql" style="background:var(--bg-input);color:var(--text-primary);padding:10px;border-radius:6px;font-size:11px;overflow-x:auto;margin-top:6px;max-height:200px;"></pre>
+        <button class="btn btn-sm btn-outline" onclick="copyCloudSQL()" style="margin-top:4px;font-size:11px;">📋 复制SQL</button>
+      </details>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" onclick="saveCloudConfig()">💾 保存并连接</button>
+      <button class="btn btn-outline" onclick="disconnectCloud()">🔌 断开云端</button>
+      <button class="btn btn-outline" onclick="closeCloudConfig()">取消</button>
+    </div>
+    <div id="cloud-msg" style="margin-top:12px;font-size:13px;"></div>
+  </div>
+</div>
 
 <!-- MAIN CONTENT -->
 <main class="main">
@@ -671,6 +721,199 @@ textarea.form-control { resize: vertical; min-height: 60px; }
 <!-- ============ SCRIPTS ============ -->
 <script>
 /* ================================================================= */
+/*                     CLOUD SYNC (SUPABASE REST API)                 */
+/* ================================================================= */
+const CLOUD = (function() {
+  var KEY_URL = 'ego_cloud_url';
+  var KEY_KEY = 'ego_cloud_key';
+  var baseUrl = '';
+  var apiKey = '';
+  var enabled = false;
+
+  function init() {
+    var url = localStorage.getItem(KEY_URL);
+    var key = localStorage.getItem(KEY_KEY);
+    if (url && key) {
+      baseUrl = url.replace(/\/+$/, '') + '/rest/v1';
+      apiKey = key;
+      enabled = true;
+    } else {
+      enabled = false;
+    }
+    updateStatusUI();
+  }
+
+  function isEnabled() { return enabled; }
+
+  function updateStatusUI() {
+    var dot = document.getElementById('cloud-dot');
+    var label = document.getElementById('cloud-label');
+    if (!dot || !label) return;
+    if (enabled) {
+      dot.className = 'cloud-dot on';
+      label.textContent = '云端已连接';
+    } else {
+      dot.className = 'cloud-dot off';
+      label.textContent = '未连接云端';
+    }
+  }
+
+  function setSyncing() {
+    var dot = document.getElementById('cloud-dot');
+    var label = document.getElementById('cloud-label');
+    if (dot) dot.className = 'cloud-dot syncing';
+    if (label) label.textContent = '同步中...';
+  }
+
+  function headers() {
+    return {
+      'apikey': apiKey,
+      'Authorization': 'Bearer ' + apiKey,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    };
+  }
+
+  async function pushToCloud(dbData) {
+    if (!isEnabled()) return false;
+    try {
+      setSyncing();
+      var resp = await fetch(baseUrl + '/ego_data?id=eq.1', {
+        method: 'PATCH',
+        headers: Object.assign(headers(), { 'Prefer': 'return=minimal' }),
+        body: JSON.stringify({ data: dbData, updated_at: new Date().toISOString() })
+      });
+      if (!resp.ok && resp.status !== 204) {
+        // If row doesn't exist yet (404), try POST insert
+        if (resp.status === 404 || resp.status === 406) {
+          var insResp = await fetch(baseUrl + '/ego_data', {
+            method: 'POST',
+            headers: Object.assign(headers(), { 'Prefer': 'return=minimal' }),
+            body: JSON.stringify({ id: 1, data: dbData, updated_at: new Date().toISOString() })
+          });
+          if (!insResp.ok && insResp.status !== 201) { console.warn('Cloud insert failed:', insResp.status); updateStatusUI(); return false; }
+        } else {
+          console.warn('Cloud push failed:', resp.status);
+          updateStatusUI();
+          return false;
+        }
+      }
+      updateStatusUI();
+      return true;
+    } catch(e) { console.warn('Cloud push error:', e); updateStatusUI(); return false; }
+  }
+
+  async function pullFromCloud() {
+    if (!isEnabled()) return null;
+    try {
+      setSyncing();
+      var resp = await fetch(baseUrl + '/ego_data?select=data,updated_at&id=eq.1', {
+        headers: { 'apikey': apiKey, 'Authorization': 'Bearer ' + apiKey }
+      });
+      if (!resp.ok) { updateStatusUI(); return null; }
+      var rows = await resp.json();
+      if (!rows || rows.length === 0) { updateStatusUI(); return null; }
+      updateStatusUI();
+      return rows[0].data;
+    } catch(e) { console.warn('Cloud pull error:', e); updateStatusUI(); return null; }
+  }
+
+  function disconnect() {
+    localStorage.removeItem(KEY_URL);
+    localStorage.removeItem(KEY_KEY);
+    baseUrl = '';
+    apiKey = '';
+    enabled = false;
+    updateStatusUI();
+  }
+
+  function configure(url, key) {
+    localStorage.setItem(KEY_URL, url);
+    localStorage.setItem(KEY_KEY, key);
+    init();
+    return enabled;
+  }
+
+  function getConfig() {
+    return { url: localStorage.getItem(KEY_URL) || '', key: localStorage.getItem(KEY_KEY) || '' };
+  }
+
+  // Get SQL migration script
+  function getMigrationSQL() {
+    return [
+      '-- 在 Supabase SQL Editor 中执行以下脚本',
+      '-- 1. 登录 https://supabase.com',
+      '-- 2. 进入你的项目 → SQL Editor',
+      '-- 3. 粘贴并运行',
+      '',
+      'CREATE TABLE IF NOT EXISTS ego_data (',
+      '  id INTEGER PRIMARY KEY DEFAULT 1,',
+      '  data JSONB NOT NULL DEFAULT \'{}\'::jsonb,',
+      '  updated_at TIMESTAMPTZ DEFAULT NOW()',
+      ');',
+      '',
+      'ALTER TABLE ego_data ENABLE ROW LEVEL SECURITY;',
+      '',
+      'DROP POLICY IF EXISTS "Allow all" ON ego_data;',
+      'CREATE POLICY "Allow all" ON ego_data FOR ALL USING (true) WITH CHECK (true);',
+      '',
+      'INSERT INTO ego_data (id, data) VALUES (1, \'{}\'::jsonb)',
+      'ON CONFLICT (id) DO NOTHING;'
+    ].join('\n');
+  }
+
+  init();
+  return { init: init, isEnabled: isEnabled, pushToCloud: pushToCloud, pullFromCloud: pullFromCloud,
+           disconnect: disconnect, configure: configure, getConfig: getConfig, getMigrationSQL: getMigrationSQL,
+           updateStatusUI: updateStatusUI };
+})();
+
+// Cloud config UI functions
+function showCloudConfig() {
+  var cfg = CLOUD.getConfig();
+  document.getElementById('cloud-url').value = cfg.url;
+  document.getElementById('cloud-key').value = cfg.key;
+  document.getElementById('cloud-sql').textContent = CLOUD.getMigrationSQL();
+  document.getElementById('cloud-msg').innerHTML = '';
+  document.getElementById('cloud-modal-overlay').classList.add('show');
+}
+function closeCloudConfig() {
+  document.getElementById('cloud-modal-overlay').classList.remove('show');
+}
+function copyCloudSQL() {
+  var sql = document.getElementById('cloud-sql').textContent;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(sql).then(function() { toast('SQL已复制到剪贴板', 'success'); });
+  } else {
+    toast('请手动复制SQL', 'info');
+  }
+}
+async function saveCloudConfig() {
+  var url = document.getElementById('cloud-url').value.trim();
+  var key = document.getElementById('cloud-key').value.trim();
+  var msg = document.getElementById('cloud-msg');
+  if (!url || !key) { msg.innerHTML = '<span style="color:var(--danger);">请填写 URL 和 Key</span>'; return; }
+  msg.innerHTML = '<span style="color:var(--warning);">⏳ 正在连接...</span>';
+  var ok = CLOUD.configure(url, key);
+  if (ok) {
+    // Force initial sync: push current local data to cloud
+    DB.load();
+    var dbData = DB.raw();
+    await CLOUD.pushToCloud(dbData);
+    msg.innerHTML = '<span style="color:var(--success);">✅ 连接成功！数据已同步到云端</span>';
+    toast('云端连接成功', 'success');
+    setTimeout(closeCloudConfig, 1500);
+  } else {
+    msg.innerHTML = '<span style="color:var(--danger);">❌ 连接失败，请检查 URL 和 Key 是否正确</span>';
+  }
+}
+async function disconnectCloud() {
+  CLOUD.disconnect();
+  document.getElementById('cloud-msg').innerHTML = '<span style="color:var(--warning);">已断开云端连接，数据仅保存在本地</span>';
+  toast('已断开云端连接', 'info');
+}
+
+/* ================================================================= */
 /*                     LOCALSTORAGE DATABASE                          */
 /* ================================================================= */
 const DB = (function() {
@@ -682,7 +925,16 @@ const DB = (function() {
     if (raw) { try { data = JSON.parse(raw); } catch(e) { data = { nextId: 1, locations:[], productivity:[], partyA:[], partyB:[], partyAOrders:[], partyBOrders:[], financial:[] }; } }
     if (!data.nextId) data.nextId = 1;
   }
-  function save() { localStorage.setItem(KEY, JSON.stringify(data)); }
+  function save() {
+    localStorage.setItem(KEY, JSON.stringify(data));
+    // Debounced cloud push (batch writes within 500ms)
+    if (CLOUD.isEnabled()) {
+      clearTimeout(save._cloudTimer);
+      save._cloudTimer = setTimeout(function() { CLOUD.pushToCloud(data); }, 500);
+    }
+  }
+  // Expose raw data for cloud sync
+  function raw() { return data; }
 
   // Generic CRUD factory
   function table(name) {
@@ -726,6 +978,9 @@ const DB = (function() {
     partyAOrders: table('partyAOrders'),
     partyBOrders: table('partyBOrders'),
     financial: table('financial'),
+    raw: raw,
+    load: load,
+    setData: function(d) { data = d; save(); },
 
     // Productivity summary
     prodSummary: function() {
@@ -2187,7 +2442,15 @@ function loadIndicators() {
 /* ================================================================= */
 /*                          INIT                                       */
 /* ================================================================= */
-(function init() {
+(async function init() {
+  // If cloud sync is enabled, pull latest data first
+  if (CLOUD.isEnabled()) {
+    var cloudData = await CLOUD.pullFromCloud();
+    if (cloudData && cloudData.nextId) {
+      DB.setData(cloudData);
+      DB.load();
+    }
+  }
   DB.seed();
   loadDashboard();
 })();
